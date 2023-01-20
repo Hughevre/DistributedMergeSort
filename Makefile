@@ -14,6 +14,7 @@ LDLIBS   := -lm
 RUNNER   := mpiexec
 
 NUM_ARRAY_SIZE := 8192
+PROCESSES_NUM  := 8
 
 .PHONY: all clean
 
@@ -29,10 +30,10 @@ $(BIN_DIR) $(OBJ_DIR):
 	mkdir -p $@
 
 run:
-	$(RUNNER) -np 4 ./$(EXE) $(NUM_ARRAY_SIZE)
+	$(RUNNER) -np $(PROCESSES_NUM) ./$(EXE) $(NUM_ARRAY_SIZE)
 
 debug:
-	$(RUNNER) -np 4 xterm -e gdb ./$(EXE)
+	$(RUNNER) -np $(PROCESSES_NUM) xterm -e gdb ./$(EXE)
 	
 clean:
 	@$(RM) -rv $(BIN_DIR) $(OBJ_DIR)
