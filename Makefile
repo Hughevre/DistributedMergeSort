@@ -10,11 +10,11 @@ CC       := mpicc
 CPPFLAGS := -Iinc
 CFLAGS   := -Wall -Wpedantic
 LDFLAGS  :=
-LDLIBS   := -lm
+LDLIBS   := -lm -lmpi
 RUNNER   := mpiexec
 
-NUM_ARRAY_SIZE := 8192
-PROCESSES_NUM  := 8
+NUM_ARRAY_SIZE := 67108864
+PROCESSES_NUM  := 4
 
 .PHONY: all clean
 

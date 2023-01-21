@@ -1,10 +1,20 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include <math.h>
 #include <time.h>
 #include "mpi.h"
 #include "ErrorCodes.h"
+
+#define ASSERT(x)\
+if(!(x))\
+{\
+    printf("[ERROR] Assertion failed\n");\
+    printf("on line %d\n", __LINE__);\
+    printf("in file %s\n", __FILE__);\
+    return;\
+}
 
 /**
  * @param x - A number that is meant to be checked
@@ -161,6 +171,20 @@ int* merge_sort(unsigned int total_merge_tree_height,
     return global_numbers_array;
 }
 
+/**
+ * @param arr_1    - Poitner to the first array used in the comparison
+ * @param arr_2    - Pointer to the second array used in the comparison
+ * @param arr_size - Size of the two arrays
+ * 
+ * @brief This functions calls ASSERT for each element of the arr_1.
+*/
+void compare_numbers_array(int* arr_1, int* arr_2, size_t arr_size) {
+    for (size_t i = 0; i < arr_size; ++i) {
+        ASSERT(arr_1[i] == arr_2[i])
+    }
+    printf("---[SUCCESS]---\nCheck ended successfully\n");
+}
+
 int main(int argc, char** argv) {
     int       comm_group_size;
     int       process_id;
@@ -196,33 +220,34 @@ int main(int argc, char** argv) {
     // Allocates some space for global array of numbers to be sorted, shared among all processes
     size_t global_numbers_array_size;
     int    *global_numbers_array;
+    int    *global_numbers_array_copy;
     size_t local_numbers_array_size;
     int    *local_numbers_array;
 
     if (process_id == 0) {
         global_numbers_array_size = atoi(argv[1]);
-    }
-    MPI_Bcast(&global_numbers_array_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (process_id == 0) {
-        global_numbers_array = malloc(global_numbers_array_size * sizeof(int));
+        global_numbers_array      = calloc(global_numbers_array_size, sizeof(int));
+        global_numbers_array_copy = calloc(global_numbers_array_size, sizeof(int));
         fill_numbers_array(global_numbers_array, global_numbers_array_size, array_max_value, array_min_value);
+        memcpy(global_numbers_array_copy, global_numbers_array, sizeof(int)*global_numbers_array_size);
 #ifdef DEBUG
         print_numbers_array(global_numbers_array, global_numbers_array_size);
 #endif
     }
 
+    MPI_Bcast(&global_numbers_array_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
     // Allocates some space for local array, private for each process
     local_numbers_array_size = global_numbers_array_size / comm_group_size;
-    local_numbers_array      = malloc(local_numbers_array_size * sizeof(int));
+    local_numbers_array      = calloc(local_numbers_array_size, sizeof(int));
 
-    MPI_Scatter(global_numbers_array, 
-                local_numbers_array_size, 
-                MPI_INT, 
-                local_numbers_array, 
-                local_numbers_array_size, 
-                MPI_INT, 
-                0, 
+    MPI_Scatter(global_numbers_array,
+                local_numbers_array_size,
+                MPI_INT,
+                local_numbers_array,
+                local_numbers_array_size,
+                MPI_INT,
+                0,
                 MPI_COMM_WORLD);
 
     // Calculate total height of tree
@@ -231,43 +256,33 @@ int main(int argc, char** argv) {
 
     // Starts measuring a time of execution
     double start_time;
-    double local_time;
-    double total_time;
-    double start_time_of_pid_0;
-    double total_time_of_pid_0;
-    double start_time_of_pid_non_0;
-    double total_time_of_pid_non_0;
+    double end_time;
+
+    MPI_Barrier(MPI_COMM_WORLD);
     start_time = MPI_Wtime();
 
     // Main thread of the programm
     if (process_id == 0) {
-        start_time_of_pid_0 = MPI_Wtime();
         global_numbers_array = merge_sort(merge_tree_height, process_id, local_numbers_array, local_numbers_array_size, MPI_COMM_WORLD, global_numbers_array);
-        total_time_of_pid_0 = MPI_Wtime() - start_time_of_pid_0;
-        printf("Process num. %d of %d total processes on host %s took %f seconds\n", process_id, comm_group_size, host_name, total_time_of_pid_0);
     } else {
-        start_time_of_pid_non_0 = MPI_Wtime();
         merge_sort(merge_tree_height, process_id, local_numbers_array, local_numbers_array_size, MPI_COMM_WORLD, NULL);
-        total_time_of_pid_non_0 = MPI_Wtime() - start_time_of_pid_non_0;
-        printf("Process num. %d of %d total processes on host %s took %f seconds\n", process_id, comm_group_size, host_name, total_time_of_pid_non_0);
     }
 
     // Stops measuring the time
-    local_time = MPI_Wtime() - start_time;
-    MPI_Reduce(&local_time, 
-               &total_time, 
-               1, 
-               MPI_DOUBLE,
-               MPI_MAX, 
-               0, 
-               MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
+    end_time = MPI_Wtime();
 
-    // Frees the memory occupied by global array of numbers
+    // Makes few final tocuhes
     if (process_id == 0) {
-        printf("Sorting the array of numbers took %f in seconds\n", total_time);
+        printf("Sorting the array of size %ld took %f in seconds\n", global_numbers_array_size, end_time - start_time);
+
+        // Checks if algorithm works correctly
+        qsort(global_numbers_array_copy, global_numbers_array_size, sizeof(int), ascending_comparator);
+        compare_numbers_array(global_numbers_array, global_numbers_array_copy, global_numbers_array_size);
 #ifdef DEBUG
-        print_numbers_array(global_numbers_array, global_numbers_array_size);
+        print_numbers_array(global_numbers_array_copy, global_numbers_array_size);
 #endif
+        free(global_numbers_array_copy);
         free(global_numbers_array);
     }
 
